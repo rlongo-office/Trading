@@ -38,13 +38,21 @@ def save_gbm_model(trees, initial_prediction, learning_rate, filename='model.jso
         json.dump(model_data, f, indent=4)
 
 def load_tree(node_data):
+    """ Recursively load a tree from a nested dictionary. """
     if "value" in node_data:
+        # This is a leaf node
         return LeafNode(value=node_data["value"])
     else:
-        node = DecisionNode(feature_index=node_data["feature_index"], threshold=node_data["threshold"])
-        node.left = load_tree(node_data["left"])
-        node.right = load_tree(node_data["right"])
-        return node
+        # This is a decision node
+        left_node = load_tree(node_data["left"]) if "left" in node_data else None
+        right_node = load_tree(node_data["right"]) if "right" in node_data else None
+        return DecisionNode(
+            feature_index=node_data["feature_index"], 
+            threshold=node_data["threshold"], 
+            left=left_node, 
+            right=right_node
+        )
+
 
 def load_gbm_model(filename='model.json'):
     with open(filename, 'r') as f:

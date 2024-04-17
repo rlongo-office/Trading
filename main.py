@@ -111,7 +111,11 @@ def main():
 
     X = data[['TRANSPORT_FEES', 'EXPORT_TARIFF', 'IMPORT_TARIFF', 'EMA_Sunlight', 'AdjustedHumidity', 'TimeOfDay']].values
     y = data['ORCHIDS'].values
+    data.to_csv("day_0_modded_data.csv",index=False)
+
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
 
     lr = LinearRegression()
     lr.fit(X_train, y_train)
@@ -142,6 +146,19 @@ def main():
     print("\nCustom Gradient Boosting Metrics:")
     print("R^2:", r2_score(y_test, custom_gbm_test_predictions))
     print("MSE:", mean_squared_error(y_test, custom_gbm_test_predictions))
+
+    #Testing this against a new day of data
+    new_data = pd.read_csv('prices_round_2_day_1.csv', delimiter=';')
+    new_data['EMA_Sunlight'] = calculate_ema(data['SUNLIGHT'], alpha=0.1)
+    new_data['TimeOfDay'] = data['timestamp'] / max(data['timestamp'])
+    new_data['AdjustedHumidity'] = data['HUMIDITY'].apply(lambda x: x if 60 <= x <= 80 else (x - 2 if x > 80 else x + 2))
+
+    X_new = new_data[['TRANSPORT_FEES', 'EXPORT_TARIFF', 'IMPORT_TARIFF', 'EMA_Sunlight', 'AdjustedHumidity', 'TimeOfDay']].values
+    y_new = new_data['ORCHIDS'].values
+    predictions_new = predict_with_gbm_model(X_new, trees, initial_pred, lr)
+    print("R^2 Score:", r2_score(y_new, predictions_new))
+    print("MSE:", mean_squared_error(y_new, predictions_new))
+
 
 if __name__ == "__main__":
     main()
