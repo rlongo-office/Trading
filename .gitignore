@@ -1,0 +1,13 @@
+# Ignore Python virtual environments
+venv/
+.venv/
+
+# Ignore compiled Python files
+__pycache__/
+*.py[cod]
+
+# Ignore other non-relevant files such as local configuration files
+.DS_Store  # For MacOS
+.idea/     # For PyCharm
+*.log
+.vscode/
