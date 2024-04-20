@@ -67,13 +67,12 @@ def main_old():
 def main():
     trained_data = 'day_-1_features.csv'  # This should be your trained dataset
     new_data_file = 'day_0_features.csv'  # This is the new data to prepare
-
     # Load and prepare initial data
-    data = prepare_data_simple(trained_data)
+    data = prepare_data_simple(trained_data)  # Preprocessing function that scales and adds necessary features without including 'ORCHIDS'
 
     # Feature engineering with Featuretools
     es = ft.EntitySet(id='Orchids')
-    es.add_dataframe(dataframe_name='data', dataframe=data, index='index')
+    es = es.add_dataframe(dataframe_name='data', dataframe=data, index='index')
 
     # Automatically generate features using specified primitives
     feature_matrix, feature_defs = ft.dfs(entityset=es, target_dataframe_name='data',
@@ -103,27 +102,23 @@ def main():
     print("R^2 Score:", r2_score(y_val, y_pred_val_sklearn))
     print("MSE:", mean_squared_error(y_val, y_pred_val_sklearn))
 
-    # Prepare new data using the incremental data preparation function
+     # Prepare new data using an incremental preparation function
     new_data = prepare_data_incremental(trained_data, new_data_file)
 
-    # Update the EntitySet with the new data for the same dataframe
-    #es['data'].df = new_data  # Update the dataframe directly in the EntitySet
-
+    # Update the EntitySet with the new data
     es = ft.EntitySet(id='Orchids')  # reinitialize the EntitySet
     es.add_dataframe(dataframe_name='data', dataframe=new_data, index='index', make_index=True)
 
-    # Calculate the feature matrix for the new data using the same EntitySet and feature definitions
+    # Recalculate feature matrix for the new data
     new_feature_matrix = ft.calculate_feature_matrix(entityset=es, features=feature_defs)
-    
     X_new = new_feature_matrix[features].values
     Y_new = new_feature_matrix['Scaled_Orchids'].values
 
     # Predict on new data
-    Y_new_pred_sklearn = model.predict(X_new)
-
+    Y_new_pred = model.predict(X_new)
     print("\nNew Data File with Sklearn Gradient Boosting Metrics:")
-    print("R^2 Score:", r2_score(Y_new, Y_new_pred_sklearn))
-    print("MSE:", mean_squared_error(Y_new, Y_new_pred_sklearn))
+    print("R^2 Score:", r2_score(Y_new, Y_new_pred))
+    print("MSE:", mean_squared_error(Y_new, Y_new_pred))
 
 if __name__ == "__main__":
     main()
