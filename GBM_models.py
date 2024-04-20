@@ -128,6 +128,15 @@ def create_poly_features(data, features, degree):
     poly_features = poly.fit_transform(data[features])
     return pd.DataFrame(poly_features, columns=poly.get_feature_names_out(features))
 
+
+def prepare_data_simple(filename):
+    print("Simple data preparation of data from file.")
+    data = pd.read_csv(filename, delimiter=',')
+    data.reset_index(inplace=True, drop=True)
+    data['Scaled_Sunlight'] = standard_scale(data['SUNLIGHT'].values)
+    data['Scaled_Orchids'] = standard_scale(data['ORCHIDS'].values)
+    return data
+
 def prepare_data(filename):
     print("Preparing data from file.")
     data = pd.read_csv(filename, delimiter=';')
@@ -153,3 +162,67 @@ def prepare_data(filename):
     #data['Orchids_Plus_ScaledOrchids'] = data['ORCHIDS'] + data['Scaled_Orchids']
 
     return data
+
+
+######## TO DEAL WTIH INCREMENTAL NATURE OF TESTING NEW TIME SLICES FOR MODEL STRENGTH WITH SCALED VALUES #########
+
+def online_update(existingAggregate, newValue):
+    (count, mean, M2) = existingAggregate
+    count += 1
+    delta = newValue - mean
+    mean += delta / count
+    delta2 = newValue - mean
+    M2 += delta * delta2
+
+    return (count, mean, M2)
+
+def finalize_variance(count, M2):
+    if count < 2:
+        return float('nan')
+    else:
+        return M2 / count
+
+
+def prepare_data_incremental(trained_file, new_file):
+    print("Loading training data for scaling parameters.")
+    trained_data = pd.read_csv(trained_file, delimiter=',')
+    new_data = pd.read_csv(new_file, delimiter=',')
+
+    # Initial calculations from trained data
+    scaling_params = {
+        'SUNLIGHT': {
+            'count': len(trained_data),
+            'mean': trained_data['SUNLIGHT'].mean(),
+            'M2': ((trained_data['SUNLIGHT'] - trained_data['SUNLIGHT'].mean())**2).sum()
+        },
+        'ORCHIDS': {
+            'count': len(trained_data),
+            'mean': trained_data['ORCHIDS'].mean(),
+            'M2': ((trained_data['ORCHIDS'] - trained_data['ORCHIDS'].mean())**2).sum()
+        }
+    }
+
+    # Incremental scaling for new data
+    scaled_sunlight = []
+    scaled_orchids = []
+    for index, row in new_data.iterrows():
+        # Update SUNLIGHT stats and scale
+        sunlight_aggregate = online_update((scaling_params['SUNLIGHT']['count'], 
+                                            scaling_params['SUNLIGHT']['mean'], 
+                                            scaling_params['SUNLIGHT']['M2']), row['SUNLIGHT'])
+        scaling_params['SUNLIGHT']['count'], scaling_params['SUNLIGHT']['mean'], scaling_params['SUNLIGHT']['M2'] = sunlight_aggregate
+        sunlight_std = finalize_variance(scaling_params['SUNLIGHT']['count'], scaling_params['SUNLIGHT']['M2'])**0.5
+        scaled_sunlight.append((row['SUNLIGHT'] - scaling_params['SUNLIGHT']['mean']) / sunlight_std)
+
+        # Update ORCHIDS stats and scale
+        orchids_aggregate = online_update((scaling_params['ORCHIDS']['count'], 
+                                           scaling_params['ORCHIDS']['mean'], 
+                                           scaling_params['ORCHIDS']['M2']), row['ORCHIDS'])
+        scaling_params['ORCHIDS']['count'], scaling_params['ORCHIDS']['mean'], scaling_params['ORCHIDS']['M2'] = orchids_aggregate
+        orchids_std = finalize_variance(scaling_params['ORCHIDS']['count'], scaling_params['ORCHIDS']['M2'])**0.5
+        scaled_orchids.append((row['ORCHIDS'] - scaling_params['ORCHIDS']['mean']) / orchids_std)
+
+    new_data['Scaled_Sunlight'] = scaled_sunlight
+    new_data['Scaled_Orchids'] = scaled_orchids
+
+    return new_data

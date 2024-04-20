@@ -4,7 +4,7 @@ import featuretools as ft
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_squared_error, r2_score
-from GBM_models import prepare_data, custom_gradient_boosting, predict_with_gbm_model, standard_scale, calculate_ema
+from GBM_models import prepare_data, prepare_data_simple, custom_gradient_boosting, predict_with_gbm_model,prepare_data_incremental
 
 def main_old():
     # Load and prepare initial data
@@ -65,19 +65,22 @@ def main_old():
 # Assuming the prepare_data and other utility functions are imported from your GBM_models.py
 
 def main():
+    trained_data = 'day_-1_features.csv'  # This should be your trained dataset
+    new_data_file = 'day_0_features.csv'  # This is the new data to prepare
+
     # Load and prepare initial data
-    data = prepare_data('prices_round_2_day_0.csv')
+    data = prepare_data_simple(trained_data)
 
     # Feature engineering with Featuretools
     es = ft.EntitySet(id='Orchids')
-    es = es.add_dataframe(dataframe_name='data', dataframe=data, index='index')
+    es.add_dataframe(dataframe_name='data', dataframe=data, index='index')
 
     # Automatically generate features using specified primitives
     feature_matrix, feature_defs = ft.dfs(entityset=es, target_dataframe_name='data',
                                           trans_primitives=['add_numeric', 'multiply_numeric'])
 
-    # Select features and prepare data matrix
-    features = [str(feature) for feature in feature_matrix.columns if feature not in ['Scaled_Orchids', 'timestamp']]
+    # Exclude 'ORCHIDS' from features if it's still in the dataset, along with other non-feature columns like 'timestamp' or 'time_of_day'
+    features = [str(feature) for feature in feature_matrix.columns if feature not in ['Scaled_Orchids', 'ORCHIDS', 'timestamp', 'time_of_day']]
     X = feature_matrix[features].values
     y = feature_matrix['Scaled_Orchids'].values
 
@@ -93,17 +96,27 @@ def main():
     feature_importances = pd.DataFrame(model.feature_importances_,
                                        index=features,
                                        columns=['importance']).sort_values('importance', ascending=False)
-    print("Top 20 Feature Importances:\n", feature_importances.sort_values('importance', ascending=False).head(30))
+    print("Top 20 Feature Importances:\n", feature_importances.sort_values('importance', ascending=False).head(20))
 
     # Output results
     print("Sklearn Gradient Boosting Metrics:")
     print("R^2 Score:", r2_score(y_val, y_pred_val_sklearn))
     print("MSE:", mean_squared_error(y_val, y_pred_val_sklearn))
 
-    # Prepare new data
-    new_data = prepare_data('prices_round_2_day_1.csv')
-    X_new = new_data[features].values
-    Y_new = new_data['Scaled_Orchids'].values
+    # Prepare new data using the incremental data preparation function
+    new_data = prepare_data_incremental(trained_data, new_data_file)
+
+    # Update the EntitySet with the new data for the same dataframe
+    #es['data'].df = new_data  # Update the dataframe directly in the EntitySet
+
+    es = ft.EntitySet(id='Orchids')  # reinitialize the EntitySet
+    es.add_dataframe(dataframe_name='data', dataframe=new_data, index='index', make_index=True)
+
+    # Calculate the feature matrix for the new data using the same EntitySet and feature definitions
+    new_feature_matrix = ft.calculate_feature_matrix(entityset=es, features=feature_defs)
+    
+    X_new = new_feature_matrix[features].values
+    Y_new = new_feature_matrix['Scaled_Orchids'].values
 
     # Predict on new data
     Y_new_pred_sklearn = model.predict(X_new)
@@ -114,4 +127,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
