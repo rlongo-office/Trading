@@ -139,27 +139,21 @@ def prepare_data_simple(filename):
 
 def prepare_data(filename):
     print("Preparing data from file.")
-    data = pd.read_csv(filename, delimiter=';')
+    data = pd.read_csv(filename, delimiter=',')
     data.reset_index(inplace=True, drop=True)
-    data['Scaled_Sunlight'] = standard_scale(data['SUNLIGHT'].values)
     data['Scaled_Orchids'] = standard_scale(data['ORCHIDS'].values)
-    data['EMA_Sunlight'] = calculate_ema(data['Scaled_Sunlight'])
-    data['TimeOfDay'] = data['timestamp'] / max(data['timestamp'])
-    data['AdjustedHumidity'] = data['HUMIDITY'].apply(
-        lambda x: x if 60 <= x <= 80 else (x - 2 if x > 80 else x + 2))
 
     # Adding new features based on feature importance analysis
-    data['Orchids_Plus_TransportFees'] = data['ORCHIDS'] + data['TRANSPORT_FEES']
-    data['ImportTariff_Times_ScaledOrchids'] = data['IMPORT_TARIFF'] * data['Scaled_Orchids']
-    data['ScaledOrchids_Times_TransportFees'] = data['Scaled_Orchids'] * data['TRANSPORT_FEES']
-    #data['Day_Plus_Orchids'] = data['day'] + data['ORCHIDS']
-
-    # Adding the next five most important features
-    #data['ImportTariff_Plus_Orchids'] = data['IMPORT_TARIFF'] + data['ORCHIDS']
-    #data['AdjustedHumidity_Times_ScaledOrchids'] = data['AdjustedHumidity'] * data['Scaled_Orchids']
-    #data['Day_Plus_ScaledOrchids'] = data['day'] + data['Scaled_Orchids']
-    #data['Orchids_Times_ScaledOrchids'] = data['ORCHIDS'] * data['Scaled_Orchids']
-    #data['Orchids_Plus_ScaledOrchids'] = data['ORCHIDS'] + data['Scaled_Orchids']
+    data['Humidity_d1_Plus_Orchids'] = data['humidity_d1'] + data['ORCHIDS']
+    data['Orchids_Plus_Sunlight_d2'] = data['ORCHIDS'] + data['sunlight_d2']
+    data['Hum_gt_70_Plus_Orchids'] = data['hum_gt_70'] + data['ORCHIDS']
+    data['Avg_Hum_Times_Scaled_Orchids'] = data['avg_hum'] * data['Scaled_Orchids']
+    data['Humidity_d3_Plus_Scaled_Orchids'] = data['humidity_d3'] + data['Scaled_Orchids']
+    #data['Hum_lt_70_Plus_Orchids'] = data['hum_lt_70'] + data['ORCHIDS']
+    #data['Hum_lt_70_Plus_Scaled_Orchids'] = data['hum_lt_70'] + data['Scaled_Orchids']
+    #data['Orchids_Times_Sun_gt_2500'] = data['ORCHIDS'] * data['sun_gt_2500']
+    #data['Hum_Out_Bounds_Plus_Scaled_Orchids'] = data['hum_out_bounds'] + data['Scaled_Orchids']
+    #data['Orchids_Plus_Sunlight_d3'] = data['ORCHIDS'] + data['sunlight_d3']
 
     return data
 
@@ -182,19 +176,13 @@ def finalize_variance(count, M2):
     else:
         return M2 / count
 
-
 def prepare_data_incremental(trained_file, new_file):
     print("Loading training data for scaling parameters.")
     trained_data = pd.read_csv(trained_file, delimiter=',')
     new_data = pd.read_csv(new_file, delimiter=',')
 
-    # Initial calculations from trained data
+    # Initial calculations from trained data for ORCHIDS
     scaling_params = {
-        'SUNLIGHT': {
-            'count': len(trained_data),
-            'mean': trained_data['SUNLIGHT'].mean(),
-            'M2': ((trained_data['SUNLIGHT'] - trained_data['SUNLIGHT'].mean())**2).sum()
-        },
         'ORCHIDS': {
             'count': len(trained_data),
             'mean': trained_data['ORCHIDS'].mean(),
@@ -203,17 +191,8 @@ def prepare_data_incremental(trained_file, new_file):
     }
 
     # Incremental scaling for new data
-    scaled_sunlight = []
     scaled_orchids = []
     for index, row in new_data.iterrows():
-        # Update SUNLIGHT stats and scale
-        sunlight_aggregate = online_update((scaling_params['SUNLIGHT']['count'], 
-                                            scaling_params['SUNLIGHT']['mean'], 
-                                            scaling_params['SUNLIGHT']['M2']), row['SUNLIGHT'])
-        scaling_params['SUNLIGHT']['count'], scaling_params['SUNLIGHT']['mean'], scaling_params['SUNLIGHT']['M2'] = sunlight_aggregate
-        sunlight_std = finalize_variance(scaling_params['SUNLIGHT']['count'], scaling_params['SUNLIGHT']['M2'])**0.5
-        scaled_sunlight.append((row['SUNLIGHT'] - scaling_params['SUNLIGHT']['mean']) / sunlight_std)
-
         # Update ORCHIDS stats and scale
         orchids_aggregate = online_update((scaling_params['ORCHIDS']['count'], 
                                            scaling_params['ORCHIDS']['mean'], 
@@ -222,7 +201,18 @@ def prepare_data_incremental(trained_file, new_file):
         orchids_std = finalize_variance(scaling_params['ORCHIDS']['count'], scaling_params['ORCHIDS']['M2'])**0.5
         scaled_orchids.append((row['ORCHIDS'] - scaling_params['ORCHIDS']['mean']) / orchids_std)
 
-    new_data['Scaled_Sunlight'] = scaled_sunlight
     new_data['Scaled_Orchids'] = scaled_orchids
+
+        # Adding new features based on feature importance analysis
+    new_data['Humidity_d1_Plus_Orchids'] = new_data['humidity_d1'] + new_data['ORCHIDS']
+    new_data['Orchids_Plus_Sunlight_d2'] = new_data['ORCHIDS'] + new_data['sunlight_d2']
+    new_data['Hum_gt_70_Plus_Orchids'] = new_data['hum_gt_70'] + new_data['ORCHIDS']
+    new_data['Avg_Hum_Times_Scaled_Orchids'] = new_data['avg_hum'] * new_data['Scaled_Orchids']
+    new_data['Humidity_d3_Plus_Scaled_Orchids'] = new_data['humidity_d3'] + new_data['Scaled_Orchids']
+    #data['Hum_lt_70_Plus_Orchids'] = data['hum_lt_70'] + data['ORCHIDS']
+    #data['Hum_lt_70_Plus_Scaled_Orchids'] = data['hum_lt_70'] + data['Scaled_Orchids']
+    #data['Orchids_Times_Sun_gt_2500'] = data['ORCHIDS'] * data['sun_gt_2500']
+    #data['Hum_Out_Bounds_Plus_Scaled_Orchids'] = data['hum_out_bounds'] + data['Scaled_Orchids']
+    #data['Orchids_Plus_Sunlight_d3'] = data['ORCHIDS'] + data['sunlight_d3']
 
     return new_data
